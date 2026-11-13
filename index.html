@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="tk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Indikator analyzer</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#050a06;--panel:#0b140d;--line:#1a2a1d;--text:#f2f6f2;--mute:#8a9a8c;--acc:#6dff1a;--accd:#2f7a0a}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--text);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+body{padding:16px 14px calc(96px + env(safe-area-inset-bottom,0px))}
+.top{display:flex;justify-content:space-between;align-items:center;margin:6px 2px 18px}
+.logo{font-size:26px;font-weight:800;font-style:italic;letter-spacing:-.5px}
+.logo b{color:var(--acc)}
+.hero{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--acc);border-radius:16px;padding:22px 20px;margin-bottom:14px}
+.hero h1{font-size:28px;margin-bottom:10px}
+.hero p{color:var(--mute);font-size:16px;line-height:1.4}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:left;color:inherit;font:inherit;cursor:pointer;min-height:150px;display:flex;flex-direction:column;gap:6px}
+.card:focus-visible{outline:2px solid var(--acc)}
+.card.on{border-color:var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:center;color:var(--mute);font-size:13px}
+.tag{background:#16300f;color:var(--acc);font-weight:700;font-style:italic;font-size:12px;padding:6px 10px;border-radius:99px}
+.card h2{font-size:26px;margin-top:8px}
+.card p{color:var(--mute);font-size:13px;line-height:1.35}
+.sheet{margin-top:16px;background:var(--panel);border:1px solid var(--acc);border-radius:16px;padding:16px;display:none}
+.sheet.show{display:block}
+.sheet h3{font-size:18px;margin-bottom:12px}
+.pairs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.pair{background:#0f1d11;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;cursor:pointer}
+.pair.on{background:var(--acc);color:#06210a;border-color:var(--acc);font-weight:700}
+.go{width:100%;background:var(--acc);color:#06210a;border:0;border-radius:12px;padding:14px;font:inherit;font-size:16px;font-weight:800;cursor:pointer}
+.go:disabled{opacity:.4}
+.out{margin-top:14px;font-size:15px;line-height:1.45;color:var(--mute)}
+.out strong{font-size:28px;display:block;margin-bottom:4px}
+.buy{color:var(--acc)}.sell{color:#ff5a4d}
+nav{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));background:#0b140d;border:1px solid var(--line);border-radius:20px;display:flex;padding:6px;gap:6px}
+nav button{flex:1;background:none;border:0;color:var(--mute);font:inherit;font-size:14px;padding:12px 4px;border-radius:14px;cursor:pointer}
+nav button.on{background:var(--acc);color:#06210a;font-weight:800}
+.page{display:none}.page.show{display:block}
+.page.plain{padding:18px 4px;color:var(--mute);line-height:1.5}
+@media(prefers-reduced-motion:no-preference){.sheet.show{animation:up .2s ease-out}@keyframes up{from{opacity:0;transform:translateY(8px)}}}
+</style>
+</head>
+<body>
+<div class="top"><div class="logo">INDIKATOR <b>ANALYZER</b></div></div>
+
+<section class="page show" id="p-signals">
+  <div class="hero"><h1>Signal merkezi</h1><p>Signal almak üçin aşakdan bazary saýla.</p></div>
+  <div class="grid" id="grid"></div>
+  <div class="sheet" id="sheet">
+    <h3 id="sheetTitle"></h3>
+    <div class="pairs" id="pairs"></div>
+    <button class="go" id="go" disabled>Signal al</button>
+    <div class="out" id="out"></div>
+  </div>
+</section>
+
+<section class="page plain" id="p-learn"><h2 style="color:#f2f6f2;margin-bottom:8px">Okuw</h2>Bu ýere okuw materiallaryny goşup bilersiň.</section>
+<section class="page plain" id="p-profile"><h2 style="color:#f2f6f2;margin-bottom:8px">Profil</h2><div id="who">Ulanyjy</div></section>
+
+<nav>
+  <button data-p="learn">Okuw</button>
+  <button data-p="signals" class="on">Signallar</button>
+  <button data-p="profile">Profil</button>
+</nav>
+
+<script>
+// Backend salgysy (soňra goýarsyň). Boş bolsa signal berilmeýär.
+const API_URL = "";
+
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const MARKETS = [
+  {id:"forex", name:"FOREX", desc:"Adaty walýuta jübütleri, bazar bahalary bilen.", pairs:["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD"]},
+  {id:"otc", name:"OTC", desc:"Bazardan daşary sessiýalar üçin OTC jübütleri.", pairs:["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/CAD OTC"]},
+  {id:"commod", name:"Çig mal", desc:"Çig mal OTC aktiwleri.", pairs:["Gold OTC","Silver OTC","Brent OTC","WTI OTC"]},
+  {id:"stocks", name:"Aksiýalar", desc:"Aksiýa OTC aktiwleri.", pairs:["Apple OTC","Tesla OTC","Amazon OTC","Microsoft OTC"]},
+  {id:"crypto", name:"Kripto", desc:"Kriptowalýuta OTC aktiwleri.", pairs:["BTC/USD OTC","ETH/USD OTC","LTC/USD OTC"]}
+];
+
+const grid = document.getElementById("grid"), sheet = document.getElementById("sheet"),
+      pairsEl = document.getElementById("pairs"), go = document.getElementById("go"),
+      out = document.getElementById("out"), title = document.getElementById("sheetTitle");
+let market = null, pair = null;
+
+MARKETS.forEach(m => {
+  const b = document.createElement("button");
+  b.className = "card"; b.dataset.id = m.id;
+  b.innerHTML = '<div class="row"><span>Bazar</span><span class="tag">Elýeterli</span></div><h2></h2><p></p>';
+  b.querySelector("h2").textContent = m.name;
+  b.querySelector("p").textContent = m.desc;
+  b.onclick = () => openMarket(m);
+  grid.appendChild(b);
+});
+
+function openMarket(m){
+  market = m; pair = null; out.innerHTML = ""; go.disabled = true;
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("on", c.dataset.id === m.id));
+  title.textContent = m.name + ": jübüt saýla";
+  pairsEl.innerHTML = "";
+  m.pairs.forEach(p => {
+    const b = document.createElement("button");
+    b.className = "pair"; b.textContent = p;
+    b.onclick = () => {
+      pair = p; go.disabled = false;
+      pairsEl.querySelectorAll(".pair").forEach(x => x.classList.toggle("on", x === b));
+    };
+    pairsEl.appendChild(b);
+  });
+  sheet.classList.add("show");
+  sheet.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+go.onclick = async () => {
+  if (!pair) return;
+  if (!API_URL) { out.textContent = "Backend entek baglanmady. Kodda API_URL goýulmaly."; return; }
+  out.textContent = "Analiz edilýär...";
+  try {
+    const r = await fetch(API_URL + "?market=" + encodeURIComponent(market.id) + "&pair=" + encodeURIComponent(pair));
+    const d = await r.json(); // garaşylýar: {"signal":"BUY"|"SELL","info":"..."}
+    const buy = d.signal === "BUY";
+    out.innerHTML = '<strong class="' + (buy ? "buy" : "sell") + '">' + (buy ? "BUY" : "SELL") + '</strong>';
+    const i = document.createElement("div"); i.textContent = d.info || ""; out.appendChild(i);
+  } catch (e) { out.textContent = "Ýalňyşlyk: backend-e ýetip bolmady."; }
+};
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".page").forEach(p => p.classList.toggle("show", p.id === "p-" + b.dataset.p));
+});
+
+const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+if (u) document.getElementById("who").textContent = u.first_name + (u.username ? " (@" + u.username + ")" : "");
+</script>
+</body>
+</html>
